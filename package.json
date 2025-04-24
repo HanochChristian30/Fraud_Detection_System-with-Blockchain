@@ -1,0 +1,25 @@
+{
+    "name": "fraud-detection-blockchain",
+    "version": "1.0.0",
+    "description": "Fraud Detection System with Blockchain Integration",
+    "main": "index.js",
+    "scripts": {
+        "test": "hardhat test",
+        "compile": "hardhat compile",
+        "deploy": "hardhat run scripts/deploy.js --network ganache",
+        "node": "hardhat node",
+        "start": "streamlit run Prediction.py"
+    },
+    "dependencies": {
+        "@nomiclabs/hardhat-ethers": "^2.2.2",
+        "@nomiclabs/hardhat-waffle": "^2.0.5",
+        "chai": "^4.3.7",
+        "ethereum-waffle": "^4.0.10",
+        "ethers": "^5.7.2",
+        "hardhat": "^2.23.0",
+        "web3": "^1.8.2"
+    },
+    "devDependencies": {
+        "@openzeppelin/contracts": "^4.8.3"
+    }
+}
