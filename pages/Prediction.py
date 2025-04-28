@@ -5,6 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
 import datetime
 import os
 from imblearn.over_sampling import SMOTE
@@ -133,6 +134,20 @@ def preprocess_data(df):
     if 'amt' in processed_df.columns:
         processed_df.rename(columns={'amt': 'amount'}, inplace=True)
     
+    # Handle NaN values - Add imputation step
+    numerical_features = processed_df.select_dtypes(include=['float64', 'int64']).columns
+    categorical_features = processed_df.select_dtypes(include=['object', 'category']).columns
+    
+    # Impute numerical features with median
+    if len(numerical_features) > 0:
+        num_imputer = SimpleImputer(strategy='median')
+        processed_df[numerical_features] = num_imputer.fit_transform(processed_df[numerical_features])
+    
+    # Impute categorical features with most frequent value
+    if len(categorical_features) > 0:
+        cat_imputer = SimpleImputer(strategy='most_frequent')
+        processed_df[categorical_features] = cat_imputer.fit_transform(processed_df[categorical_features])
+    
     return processed_df
 
 # Load data
@@ -190,8 +205,6 @@ use_smote = st.sidebar.checkbox("Apply SMOTE for training", value=False,
 risk_threshold = st.sidebar.slider("Risk Threshold", 0.0, 1.0, 0.5, 
                                 help="Adjust threshold for classifying a transaction as fraudulent")
 
-# Sample size is now removed to avoid issues with large datasets
-
 # Add "Train New Models" button
 if st.sidebar.button("Train & Save Models"):
     with st.spinner("Training and saving all models..."):
@@ -211,6 +224,14 @@ if st.sidebar.button("Train & Save Models"):
                     st.sidebar.warning("Dataset too large for SMOTE. Training without SMOTE.")
                     use_smote_actual = False
                 else:
+                    # Make sure we have no NaN values before applying SMOTE
+                    if X_train.isna().any().any():
+                        st.sidebar.warning("Data contains NaN values. Applying imputation before SMOTE.")
+                        # Impute missing values
+                        num_cols = X_train.select_dtypes(include=['float64', 'int64']).columns
+                        num_imputer = SimpleImputer(strategy='median')
+                        X_train[num_cols] = num_imputer.fit_transform(X_train[num_cols])
+                        
                     smote = SMOTE(sampling_strategy=0.5, k_neighbors=min(5, sum(y_train)-1), random_state=42)
                     X_train, y_train = smote.fit_resample(X_train, y_train)
                     st.sidebar.success(f"Applied SMOTE: Balanced training data")
@@ -253,15 +274,15 @@ with col1:
     transaction_date = st.date_input("Transaction Date", today)
     transaction_time = st.time_input("Transaction Time", datetime.time(12, 0))
     
-    # Merchant and category with complete dropdowns (no search)
+    # Extract unique merchants and categories from dataset for proper selection
     if 'merchant' in df.columns:
-        merchants = sorted(df['merchant'].unique())
+        merchants = sorted(df['merchant'].unique().tolist())
         merchant = st.selectbox("Merchant", merchants)
     else:
         merchant = st.text_input("Merchant", "Unknown")
         
     if 'category' in df.columns:
-        categories = sorted(df['category'].unique())
+        categories = sorted(df['category'].unique().tolist())
         category = st.selectbox("Category", categories)
     else:
         category = st.text_input("Category", "retail")
@@ -292,7 +313,7 @@ with col1:
     
     # Optional: Job (with full dropdown, no search)
     if 'job' in df.columns:
-        jobs = sorted(df['job'].unique())
+        jobs = sorted(df['job'].unique().tolist())
         job = st.selectbox("Job", jobs)
     else:
         job = None
@@ -352,7 +373,7 @@ with col2:
         # Combined risk factor
         risk_multiplier = hour_risk * amount_risk * location_risk * category_risk
         
-        # Process input data
+        # Process input data - this will handle NaN values now
         processed_input = preprocess_data(input_df)
         
         model = None
@@ -383,6 +404,14 @@ with col2:
                 # Keep only the columns needed for prediction and in the right order
                 processed_input = processed_input.reindex(columns=model_columns, fill_value=0)
                 
+                # Check for NaN values and impute if necessary
+                if processed_input.isna().any().any():
+                    st.warning("Input data contains missing values. Applying imputation.")
+                    num_cols = processed_input.select_dtypes(include=['float64', 'int64']).columns
+                    if len(num_cols) > 0:
+                        num_imputer = SimpleImputer(strategy='median')
+                        processed_input[num_cols] = num_imputer.fit_transform(processed_input[num_cols])
+                
                 # Make prediction and get probability
                 prediction = model.predict(processed_input)
                 probability = model.predict_proba(processed_input)[0][1]
@@ -407,6 +436,13 @@ with col2:
                     if len(X_train) > 100000:  # Arbitrary threshold for "large" dataset
                         st.warning("Dataset too large for SMOTE. Training without SMOTE.")
                     else:
+                        # Check for NaN values and impute if necessary
+                        if X_train.isna().any().any():
+                            st.warning("Training data contains missing values. Applying imputation before SMOTE.")
+                            num_cols = X_train.select_dtypes(include=['float64', 'int64']).columns
+                            num_imputer = SimpleImputer(strategy='median')
+                            X_train[num_cols] = num_imputer.fit_transform(X_train[num_cols])
+                        
                         smote = SMOTE(sampling_strategy=0.5, k_neighbors=min(5, sum(y_train)-1), random_state=42)
                         X_train, y_train = smote.fit_resample(X_train, y_train)
                         use_smote_actual = True
@@ -434,6 +470,14 @@ with col2:
             
             # Keep only the columns needed for prediction and in the right order
             processed_input = processed_input.reindex(columns=X.columns, fill_value=0)
+            
+            # Check for NaN values in the input data
+            if processed_input.isna().any().any():
+                st.warning("Input data contains missing values. Applying imputation.")
+                num_cols = processed_input.select_dtypes(include=['float64', 'int64']).columns
+                if len(num_cols) > 0:
+                    num_imputer = SimpleImputer(strategy='median')
+                    processed_input[num_cols] = num_imputer.fit_transform(processed_input[num_cols])
             
             # Make prediction and get probability
             prediction = model.predict(processed_input)
