@@ -8,34 +8,85 @@
     <style>
         body {
             padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
         }
         .card {
             margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: none;
+        }
+        .card-header {
+            background-color: #343a40;
+            color: white;
+            border-top-left-radius: 10px !important;
+            border-top-right-radius: 10px !important;
+        }
+        .navbar {
+            margin-bottom: 20px;
+            background-color: #343a40 !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .navbar-brand {
+            font-weight: bold;
+            color: white !important;
         }
         .prediction-card {
             border-left: 5px solid #dc3545;
+            transition: transform 0.2s;
+        }
+        .prediction-card:hover {
+            transform: translateY(-5px);
         }
         .prediction-card.legitimate {
             border-left: 5px solid #198754;
         }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .badge-connected {
+            background-color: #198754;
+            color: white;
+        }
+        .badge-disconnected {
+            background-color: #dc3545;
+            color: white;
+        }
     </style>
 </head>
 <body>
+    <!-- Simple navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Fraud Detection Explorer</a>
+            <div id="network-badge" class="status-badge badge-disconnected">Disconnected</div>
+        </div>
+    </nav>
+
     <div class="container">
-        <h1 class="mb-4">Fraud Detection Blockchain Explorer</h1>
-        
+        <!-- Main content -->
         <div class="row">
+            <!-- Sidebar with connection info -->
             <div class="col-md-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5>Connection Status</h5>
+                        <h5 class="mb-0">Connection Status</h5>
                     </div>
                     <div class="card-body">
                         <div id="connection-status">
                             Connecting to blockchain...
                         </div>
                         <div class="mt-3">
-                            <h6>Account</h6>
+                            <div class="d-flex justify-content-between">
+                                <h6 class="mb-2">Account</h6>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="refreshAccounts()">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                </button>
+                            </div>
                             <select id="accounts" class="form-select">
                                 <option value="">Loading accounts...</option>
                             </select>
@@ -48,30 +99,56 @@
                 
                 <div class="card">
                     <div class="card-header">
-                        <h5>Contract Stats</h5>
+                        <h5 class="mb-0">Dashboard</h5>
                     </div>
                     <div class="card-body">
                         <div id="contract-stats">
-                            Loading...
+                            <div class="mb-3">
+                                <h6>Total Predictions</h6>
+                                <h2 id="prediction-count">-</h2>
+                            </div>
+                            <div class="mb-3">
+                                <h6>Fraud Rate</h6>
+                                <h2 id="fraud-rate">-</h2>
+                            </div>
+                            <button class="btn btn-primary w-100" onclick="loadRecentPredictions()">
+                                Refresh Data
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
             
+            <!-- Main content area -->
             <div class="col-md-8">
                 <div class="card">
-                    <div class="card-header">
-                        <h5>Recent Predictions</h5>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Predictions</h5>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-light" onclick="filterPredictions('all')">All</button>
+                            <button class="btn btn-sm btn-outline-light" onclick="filterPredictions('fraud')">Fraud</button>
+                            <button class="btn btn-sm btn-outline-light" onclick="filterPredictions('legitimate')">Legitimate</button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="recent-predictions">
-                            Loading recent predictions...
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <p class="text-center mt-3">Loading recent predictions...</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="mt-4 text-center text-muted">
+        <p>Fraud Detection Blockchain Explorer © 2025</p>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/web3@1.8.1/dist/web3.min.js"></script>

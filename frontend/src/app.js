@@ -2,6 +2,7 @@
 let web3;
 let contract;
 let selectedAccount;
+let currentFilter = 'all';
 
 // DOM elements
 const connectionStatus = document.getElementById('connection-status');
@@ -9,6 +10,9 @@ const accountsSelect = document.getElementById('accounts');
 const accountBalance = document.getElementById('account-balance');
 const contractStats = document.getElementById('contract-stats');
 const recentPredictions = document.getElementById('recent-predictions');
+const networkBadge = document.getElementById('network-badge');
+const predictionCount = document.getElementById('prediction-count');
+const fraudRate = document.getElementById('fraud-rate');
 
 // Initialize the application
 async function init() {
@@ -20,16 +24,24 @@ async function init() {
                 // Request account access
                 await window.ethereum.request({ method: 'eth_requestAccounts' });
                 connectionStatus.innerHTML = '<div class="alert alert-success">Connected to MetaMask</div>';
+                networkBadge.className = 'status-badge badge-connected';
+                networkBadge.innerText = 'Connected';
             } catch (error) {
                 connectionStatus.innerHTML = '<div class="alert alert-danger">MetaMask connection denied</div>';
+                networkBadge.className = 'status-badge badge-disconnected';
+                networkBadge.innerText = 'Disconnected';
             }
         } else if (window.web3) {
             web3 = new Web3(window.web3.currentProvider);
             connectionStatus.innerHTML = '<div class="alert alert-success">Connected to browser wallet</div>';
+            networkBadge.className = 'status-badge badge-connected';
+            networkBadge.innerText = 'Connected';
         } else {
             // Fallback to Ganache
             web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:7545'));
-            connectionStatus.innerHTML = '<div class="alert alert-warning">Connected to Ganache</div>';
+            connectionStatus.innerHTML = '<div class="alert alert-success">Connected to Ganache</div>';
+            networkBadge.className = 'status-badge badge-connected';
+            networkBadge.innerText = 'Connected (Ganache)';
         }
 
         // Load the contract
@@ -53,6 +65,8 @@ async function init() {
     } catch (error) {
         console.error('Initialization error:', error);
         connectionStatus.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        networkBadge.className = 'status-badge badge-disconnected';
+        networkBadge.innerText = 'Error';
     }
 }
 
@@ -109,6 +123,11 @@ async function loadAccounts() {
     }
 }
 
+// Refresh accounts (for button)
+function refreshAccounts() {
+    loadAccounts();
+}
+
 // Update account balance
 async function updateAccountBalance() {
     if (!selectedAccount) return;
@@ -134,16 +153,47 @@ async function loadContractStats() {
     if (!contract) return;
     
     try {
-        const predictionCount = await contract.methods.getPredictionCount().call();
+        const predictionCountValue = await contract.methods.getPredictionCount().call();
+        predictionCount.textContent = predictionCountValue;
         
-        contractStats.innerHTML = `
-            <p><strong>Total Predictions:</strong> ${predictionCount}</p>
-            <button class="btn btn-primary" onclick="loadRecentPredictions()">Refresh Data</button>
-        `;
+        // Calculate fraud rate
+        if (parseInt(predictionCountValue) > 0) {
+            let fraudCount = 0;
+            const limit = Math.min(parseInt(predictionCountValue), 100); // Check last 100 or less
+            
+            for (let i = predictionCountValue - 1; i >= predictionCountValue - limit && i >= 0; i--) {
+                const predictionId = await contract.methods.getPredictionIdAtIndex(i).call();
+                const prediction = await contract.methods.getPrediction(predictionId).call();
+                if (prediction[1]) { // isFraud
+                    fraudCount++;
+                }
+            }
+            
+            const fraudRateValue = (fraudCount / limit * 100).toFixed(1);
+            fraudRate.textContent = `${fraudRateValue}%`;
+            
+            // Color the fraud rate based on value
+            if (fraudRateValue > 20) {
+                fraudRate.style.color = '#dc3545'; // Red for high fraud
+            } else if (fraudRateValue > 5) {
+                fraudRate.style.color = '#fd7e14'; // Orange for medium fraud
+            } else {
+                fraudRate.style.color = '#198754'; // Green for low fraud
+            }
+        } else {
+            fraudRate.textContent = 'N/A';
+        }
     } catch (error) {
         console.error('Error loading contract stats:', error);
-        contractStats.innerHTML = '<div class="alert alert-danger">Error loading contract data</div>';
+        predictionCount.textContent = 'Error';
+        fraudRate.textContent = 'Error';
     }
+}
+
+// Filter predictions
+function filterPredictions(filter) {
+    currentFilter = filter;
+    loadRecentPredictions();
 }
 
 // Load recent predictions
@@ -158,10 +208,23 @@ async function loadRecentPredictions() {
             return;
         }
         
+        // Show loading state
+        recentPredictions.innerHTML = `
+            <div class="d-flex justify-content-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+            <p class="text-center mt-3">Loading recent predictions...</p>
+        `;
+        
         let predictionsHtml = '';
         const limit = Math.min(parseInt(predictionCount), 10); // Show last 10 predictions
+        let shownCount = 0;
         
-        for (let i = predictionCount - 1; i >= predictionCount - limit && i >= 0; i--) {
+        for (let i = predictionCount - 1; i >= predictionCount - 30 && i >= 0; i--) {
+            if (shownCount >= limit) break;
+            
             const predictionId = await contract.methods.getPredictionIdAtIndex(i).call();
             const prediction = await contract.methods.getPrediction(predictionId).call();
             
@@ -171,19 +234,40 @@ async function loadRecentPredictions() {
             const transactionData = prediction[3].substring(0, 10) + '...';
             const submittedBy = prediction[4];
             
+            // Apply filter
+            if (currentFilter === 'fraud' && !isFraud) continue;
+            if (currentFilter === 'legitimate' && isFraud) continue;
+            
+            shownCount++;
+            
             predictionsHtml += `
                 <div class="card mb-3 prediction-card ${!isFraud ? 'legitimate' : ''}">
                     <div class="card-body">
-                        <h5 class="card-title">${isFraud ? '⚠️ Fraudulent' : '✅ Legitimate'} (${confidence}% confidence)</h5>
-                        <p class="card-text"><small>Timestamp: ${timestamp}</small></p>
-                        <p class="card-text"><small>Transaction: ${transactionData}</small></p>
-                        <p class="card-text"><small>Submitted by: ${submittedBy.substring(0, 8)}...${submittedBy.substring(submittedBy.length - 6)}</small></p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                ${isFraud ? 
+                                    '<span class="badge bg-danger">⚠️ Fraudulent</span>' : 
+                                    '<span class="badge bg-success">✅ Legitimate</span>'}
+                            </h5>
+                            <span class="badge bg-secondary">${confidence}% confidence</span>
+                        </div>
+                        <hr>
+                        <p class="card-text mb-1"><small>Time: ${timestamp}</small></p>
+                        <p class="card-text mb-1"><small>Transaction: ${transactionData}</small></p>
+                        <p class="card-text"><small>Account: ${submittedBy.substring(0, 8)}...${submittedBy.substring(submittedBy.length - 6)}</small></p>
                     </div>
                 </div>
             `;
         }
         
-        recentPredictions.innerHTML = predictionsHtml;
+        if (shownCount === 0) {
+            recentPredictions.innerHTML = `<div class="alert alert-info">No ${currentFilter} predictions found</div>`;
+        } else {
+            recentPredictions.innerHTML = predictionsHtml;
+        }
+        
+        // Update stats
+        loadContractStats();
     } catch (error) {
         console.error('Error loading recent predictions:', error);
         recentPredictions.innerHTML = '<div class="alert alert-danger">Error loading prediction data</div>';
