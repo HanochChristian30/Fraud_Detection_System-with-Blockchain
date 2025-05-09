@@ -4,6 +4,8 @@ import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
+from bayesian_utils import BayesianRiskCalculator
 
 # Set page configuration
 st.set_page_config(
@@ -51,23 +53,41 @@ st.markdown("""
         font-size: 2rem;
         margin-bottom: 0.5rem;
     }
+    .bayesian-highlight {
+        background-color: #fff3e0;
+        padding: 1rem;
+        border-radius: 5px;
+        border-left: 4px solid #ff9800;
+        margin-bottom: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # Main page title with styled header
 st.markdown("<h1 class='main-header'>Credit Card Fraud Detection System with Blockchain</h1>", unsafe_allow_html=True)
 
-# Introduction section
+# Introduction section with Bayesian highlight
 st.markdown("""
 This system combines machine learning with blockchain technology to create a transparent and immutable 
 record of fraud detection results, providing an extra layer of security and auditability.
 """)
 
+st.markdown("<div class='bayesian-highlight'>", unsafe_allow_html=True)
+st.markdown("""
+### NEW: Bayesian Risk Scoring
+Our system now incorporates Bayesian risk scoring to enhance fraud detection accuracy. This approach:
+- Updates fraud probabilities based on specific transaction risk factors
+- Provides transparent explanations of risk indicators
+- Combines statistical ML predictions with evidence-based Bayesian analysis
+""")
+st.markdown("</div>", unsafe_allow_html=True)
+
 # Create tabs for different sections of the about page
-overview_tab, architecture_tab, models_tab, blockchain_tab, dataset_tab = st.tabs([
+overview_tab, architecture_tab, models_tab, bayesian_tab, blockchain_tab, dataset_tab = st.tabs([
     "📋 Overview", 
     "🏗️ Architecture", 
     "🤖 Models", 
+    "📊 Bayesian Analysis",
     "🔗 Blockchain", 
     "📊 Dataset"
 ])
@@ -91,6 +111,7 @@ with overview_tab:
     * Provide transparent and tamper-proof records of all fraud predictions
     * Enable detailed analysis of model performance and feature importance
     * Support model verification and auditability through blockchain integration
+    * Enhance explainability through Bayesian analysis of risk factors
     """)
     
     # Create three columns for key features
@@ -158,6 +179,7 @@ with architecture_tab:
        * Multiple fraud detection models (Logistic Regression, Random Forest, XGBoost)
        * SMOTE implementation for addressing class imbalance
        * Feature engineering and preprocessing pipeline
+       * Bayesian risk scoring for enhanced explainability
     
     3. **Blockchain Layer**
        * Ethereum-based smart contracts for recording predictions
@@ -170,17 +192,18 @@ with architecture_tab:
     
     # Define architecture boxes
     boxes = [
-        dict(name="User Interface\n(Streamlit)", x=0.5, y=0.8, width=0.3, height=0.1, color='#C5E1A5'),
+        dict(name="User Interface\n(Streamlit)", x=0.5, y=0.9, width=0.3, height=0.1, color='#C5E1A5'),
         
-        dict(name="Prediction Engine", x=0.3, y=0.6, width=0.25, height=0.1, color='#90CAF9'),
-        dict(name="Performance Analysis", x=0.7, y=0.6, width=0.25, height=0.1, color='#90CAF9'),
+        dict(name="Prediction Engine", x=0.3, y=0.7, width=0.25, height=0.1, color='#90CAF9'),
+        dict(name="Performance Analysis", x=0.7, y=0.7, width=0.25, height=0.1, color='#90CAF9'),
         
-        dict(name="ML Models\n(LR, RF, XGB)", x=0.3, y=0.4, width=0.25, height=0.1, color='#FFCC80'),
-        dict(name="SMOTE & Feature\nEngineering", x=0.7, y=0.4, width=0.25, height=0.1, color='#FFCC80'),
+        dict(name="ML Models\n(LR, RF, XGB)", x=0.2, y=0.5, width=0.2, height=0.1, color='#FFCC80'),
+        dict(name="Bayesian Risk\nScoring", x=0.5, y=0.5, width=0.2, height=0.1, color='#FFAB91'),
+        dict(name="SMOTE & Feature\nEngineering", x=0.8, y=0.5, width=0.2, height=0.1, color='#FFCC80'),
         
-        dict(name="Smart Contracts\n(Ethereum)", x=0.5, y=0.2, width=0.4, height=0.1, color='#CE93D8'),
+        dict(name="Smart Contracts\n(Ethereum)", x=0.5, y=0.3, width=0.4, height=0.1, color='#CE93D8'),
         
-        dict(name="Blockchain", x=0.5, y=0.05, width=0.6, height=0.05, color='#F48FB1'),
+        dict(name="Blockchain", x=0.5, y=0.15, width=0.6, height=0.05, color='#F48FB1'),
     ]
     
     # Draw the boxes
@@ -193,12 +216,15 @@ with architecture_tab:
         ax.text(box['x'], box['y'], box['name'], ha='center', va='center', fontsize=10)
     
     # Add arrows
-    ax.arrow(0.5, 0.75, 0, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
-    ax.arrow(0.3, 0.55, 0, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
-    ax.arrow(0.7, 0.55, 0, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
-    ax.arrow(0.3, 0.35, 0.1, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
-    ax.arrow(0.7, 0.35, -0.1, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
-    ax.arrow(0.5, 0.15, 0, -0.05, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.5, 0.85, 0, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.3, 0.65, -0.05, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.3, 0.65, 0.15, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.7, 0.65, -0.15, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.7, 0.65, 0.05, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.2, 0.45, 0.25, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.5, 0.45, 0, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.8, 0.45, -0.25, -0.09, head_width=0.02, head_length=0.02, fc='black', ec='black')
+    ax.arrow(0.5, 0.25, 0, -0.05, head_width=0.02, head_length=0.02, fc='black', ec='black')
     
     # Set plot properties
     ax.set_xlim(0, 1)
@@ -214,9 +240,11 @@ with architecture_tab:
     
     1. User submits transaction details via the Streamlit interface
     2. The prediction engine preprocesses data and applies the selected model
-    3. Prediction results are displayed to the user and recorded on the blockchain
-    4. Performance metrics are updated and available for analysis
-    5. Blockchain explorer shows immutable record of predictions
+    3. Bayesian risk scoring analyzes transaction-specific risk factors
+    4. A hybrid risk score combines ML model and Bayesian predictions
+    5. Prediction results are displayed to the user and recorded on the blockchain
+    6. Performance metrics are updated and available for analysis
+    7. Blockchain explorer shows immutable record of predictions
     """)
     
     st.markdown("</div>", unsafe_allow_html=True)
@@ -313,6 +341,233 @@ with models_tab:
     
     st.markdown("</div>", unsafe_allow_html=True)
 
+with bayesian_tab:
+    st.markdown("<div class='section'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sub-header'>Bayesian Risk Analysis</h2>", unsafe_allow_html=True)
+    
+    # Bayesian description
+    st.markdown("""
+    Our system now incorporates **Bayesian risk scoring** to enhance fraud detection accuracy and explainability.
+    This statistical approach updates probabilities as new evidence becomes available, providing a transparent
+    framework for fraud risk assessment.
+    """)
+    
+    # How Bayesian works
+    st.markdown("""
+    ### How Bayesian Risk Scoring Works
+    
+    Bayesian risk scoring is based on Bayes' theorem, which states:
+    
+    $$P(Fraud|Evidence) = \\frac{P(Evidence|Fraud) \\times P(Fraud)}{P(Evidence)}$$
+    
+    Where:
+    - P(Fraud|Evidence) is the **posterior probability** - what we want to calculate
+    - P(Evidence|Fraud) is the **likelihood** - how likely we'd see this evidence if there is fraud
+    - P(Fraud) is the **prior probability** - baseline fraud rate before seeing evidence
+    - P(Evidence) is the total probability of the evidence
+    
+    In practical terms, the system:
+    
+    1. **Starts with prior probability** - The baseline fraud rate (typically 1-3%)
+    2. **Calculates likelihood ratios** - How much more likely each risk factor is in fraudulent vs. legitimate transactions
+    3. **Combines evidence** - Multiplies likelihood ratios to get a combined likelihood ratio
+    4. **Updates probability** - Applies Bayes' theorem to get the final fraud probability
+    """)
+    
+    # Display key risk factors
+    st.markdown("""
+    ### Key Risk Factors
+    
+    The system analyzes multiple risk factors, each with its own likelihood ratio:
+    """)
+    
+    # Create a sample calculator to demonstrate
+    calculator = BayesianRiskCalculator(prior_fraud_prob=0.01)
+    
+    # Create an interactive demonstration
+    st.markdown("### Interactive Bayesian Risk Calculator")
+    st.markdown("Adjust risk factors to see how they affect fraud probability:")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        time_option = st.selectbox("Transaction Time", [
+            "Business Hours (9 AM - 6 PM)", 
+            "Evening (6 PM - 10 PM)", 
+            "Late Night (10 PM - 6 AM)"
+        ])
+        
+        amount_option = st.selectbox("Transaction Amount", [
+            "Small (< $200)", 
+            "Medium ($200 - $500)", 
+            "Large ($500 - $1000)", 
+            "Very Large (> $1000)"
+        ])
+        
+        category_option = st.selectbox("Transaction Category", [
+            "Low Risk (Grocery, Utilities, Healthcare)", 
+            "Medium Risk (Clothing, Dining, Travel)", 
+            "High Risk (Electronics, Jewelry, Gift Cards)"
+        ])
+    
+    with col2:
+        location_option = st.selectbox("Distance Between Customer & Merchant", [
+            "Close (< 20 km)", 
+            "Medium (20-50 km)", 
+            "Far (50-100 km)", 
+            "Very Far (> 100 km)"
+        ])
+        
+        account_option = st.selectbox("Account Age", [
+            "Established (> 90 days)", 
+            "Recent (30-90 days)", 
+            "New (7-30 days)", 
+            "Very New (< 7 days)"
+        ])
+        
+        device_option = st.selectbox("Device", [
+            "Known Device", 
+            "New Device"
+        ])
+    
+    # Map selections to likelihood ratios
+    time_lr = {
+        "Business Hours (9 AM - 6 PM)": 1.0,
+        "Evening (6 PM - 10 PM)": 1.5,
+        "Late Night (10 PM - 6 AM)": 3.0
+    }[time_option]
+    
+    amount_lr = {
+        "Small (< $200)": 1.0,
+        "Medium ($200 - $500)": 1.2,
+        "Large ($500 - $1000)": 2.0,
+        "Very Large (> $1000)": 5.0
+    }[amount_option]
+    
+    category_lr = {
+        "Low Risk (Grocery, Utilities, Healthcare)": 1.0,
+        "Medium Risk (Clothing, Dining, Travel)": 2.0,
+        "High Risk (Electronics, Jewelry, Gift Cards)": 4.0
+    }[category_option]
+    
+    location_lr = {
+        "Close (< 20 km)": 1.0,
+        "Medium (20-50 km)": 2.0,
+        "Far (50-100 km)": 4.0,
+        "Very Far (> 100 km)": 8.0
+    }[location_option]
+    
+    account_lr = {
+        "Established (> 90 days)": 1.0,
+        "Recent (30-90 days)": 1.3,
+        "New (7-30 days)": 2.0,
+        "Very New (< 7 days)": 5.0
+    }[account_option]
+    
+    device_lr = {
+        "Known Device": 1.0,
+        "New Device": 6.0
+    }[device_option]
+    
+    # Calculate combined likelihood ratio
+    combined_lr = time_lr * amount_lr * category_lr * location_lr * account_lr * device_lr
+    
+    # Calculate posterior probability
+    prior_prob = 0.01  # 1% prior probability of fraud
+    prior_odds = prior_prob / (1 - prior_prob)
+    posterior_odds = prior_odds * combined_lr
+    posterior_prob = posterior_odds / (1 + posterior_odds)
+    
+    # Display results
+    st.markdown("### Bayesian Analysis Results")
+    
+    # Risk gauge using matplotlib
+    fig, ax = plt.subplots(figsize=(10, 2))
+    
+    # Create a horizontal gauge
+    ax.barh([0], [1], color='lightgrey', height=0.3)
+    ax.barh([0], [posterior_prob], color='#FF5252' if posterior_prob > 0.5 else '#FFA726' if posterior_prob > 0.1 else '#66BB6A', height=0.3)
+    
+    # Add markers for different risk levels
+    ax.axvline(x=0.1, color='#66BB6A', linestyle='--', alpha=0.7)
+    ax.axvline(x=0.5, color='#FFA726', linestyle='--', alpha=0.7)
+    ax.axvline(x=0.8, color='#FF5252', linestyle='--', alpha=0.7)
+    
+    # Add labels
+    ax.text(0.05, -0.5, "Low Risk", ha='center', va='center')
+    ax.text(0.3, -0.5, "Medium Risk", ha='center', va='center')
+    ax.text(0.65, -0.5, "High Risk", ha='center', va='center')
+    ax.text(0.9, -0.5, "Very High Risk", ha='center', va='center')
+    
+    # Add fraud probability as percentage
+    ax.text(posterior_prob, 0, f" {posterior_prob:.1%}", va='center')
+    
+    # Set plot limits and remove axes
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-1, 1)
+    ax.axis('off')
+    ax.set_title('Fraud Probability')
+    
+    st.pyplot(fig)
+    
+    # Display the calculation details
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Probability Breakdown")
+        st.markdown(f"**Prior Probability:** {prior_prob:.2%}")
+        st.markdown(f"**Combined Likelihood Ratio:** {combined_lr:.2f}x")
+        st.markdown(f"**Posterior Probability:** {posterior_prob:.2%}")
+        
+        risk_label = "HIGH" if posterior_prob > 0.5 else "MEDIUM" if posterior_prob > 0.1 else "LOW"
+        risk_color = "red" if posterior_prob > 0.5 else "orange" if posterior_prob > 0.1 else "green"
+        st.markdown(f"**Risk Assessment:** <span style='color:{risk_color};font-weight:bold;'>{risk_label}</span>", unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("#### Individual Risk Factors")
+        
+        # Create a DataFrame for the likelihood ratios
+        lr_data = pd.DataFrame({
+            'Factor': ['Time of Day', 'Transaction Amount', 'Merchant Category', 
+                      'Location', 'Account Age', 'Device'],
+            'Likelihood Ratio': [time_lr, amount_lr, category_lr, 
+                                location_lr, account_lr, device_lr]
+        })
+        
+        # Create a horizontal bar chart
+        fig, ax = plt.subplots(figsize=(10, 4))
+        y_pos = np.arange(len(lr_data['Factor']))
+        ax.barh(y_pos, lr_data['Likelihood Ratio'], color='skyblue')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(lr_data['Factor'])
+        ax.invert_yaxis()  # Labels read top-to-bottom
+        ax.set_xlabel('Likelihood Ratio')
+        ax.set_title('Risk Factors Impact')
+        
+        # Add a vertical line at x=1 (baseline)
+        ax.axvline(x=1, color='red', linestyle='--', alpha=0.7)
+        
+        # Add value labels
+        for i, v in enumerate(lr_data['Likelihood Ratio']):
+            ax.text(v + 0.1, i, f'{v:.1f}x', va='center')
+        
+        st.pyplot(fig)
+    
+    # Advantages of Bayesian approach
+    st.markdown("""
+    ### Advantages of Bayesian Risk Scoring
+    
+    1. **Transparent and Explainable**: Each risk factor's contribution is clearly visible
+    2. **Combines Domain Knowledge with Data**: Incorporates expert insights with statistical patterns
+    3. **Handles Uncertainty**: Provides probabilities rather than binary decisions
+    4. **Adapts to New Evidence**: Naturally updates as more information becomes available
+    5. **Works with Limited Data**: Effective even without large training datasets
+    
+    Our system combines this Bayesian approach with machine learning models for a robust hybrid fraud detection system.
+    """)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
 with blockchain_tab:
     st.markdown("<div class='section'>", unsafe_allow_html=True)
     st.markdown("<h2 class='sub-header'>Blockchain Integration</h2>", unsafe_allow_html=True)
@@ -382,6 +637,11 @@ with blockchain_tab:
     The explorer connects to an Ethereum node (local Ganache instance for development or public 
     Ethereum network for production) using Web3.js.
     """)
+
+    # Add a screenshot mockup of the blockchain explorer
+    st.image("https://i.ibb.co/wN7rQb7/blockchain-explorer-mockup.png", 
+             caption="Blockchain Explorer Interface (Mockup)", 
+             use_column_width=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -489,6 +749,47 @@ st.sidebar.markdown("Use the pages menu to navigate to:")
 st.sidebar.markdown("- **Prediction Page**: Submit transactions for fraud analysis")
 st.sidebar.markdown("- **Performance Page**: Compare model performance metrics")
 
+# Add Bayesian risk calculator in sidebar
+st.sidebar.title("Quick Risk Calculator")
+amount = st.sidebar.slider("Transaction Amount ($)", 1, 2000, 100)
+time_options = {
+    "Morning (6 AM - 12 PM)": 1.0,
+    "Afternoon (12 PM - 6 PM)": 1.0,
+    "Evening (6 PM - 10 PM)": 1.5,
+    "Late Night (10 PM - 6 AM)": 3.0
+}
+time_of_day = st.sidebar.selectbox("Time of Day", list(time_options.keys()))
+category_options = {
+    "Grocery": 1.0,
+    "Restaurant": 1.2,
+    "Retail": 1.5,
+    "Gas": 1.0,
+    "Travel": 2.0,
+    "Electronics": 3.5,
+    "Jewelry": 4.0
+}
+category = st.sidebar.selectbox("Category", list(category_options.keys()))
+
+# Calculate quick risk score
+quick_calc = BayesianRiskCalculator(prior_fraud_prob=0.01)
+amount_lr = 5.0 if amount > 1000 else 2.0 if amount > 500 else 1.2 if amount > 200 else 1.0
+time_lr = time_options[time_of_day]
+category_lr = category_options[category]
+
+combined_lr = amount_lr * time_lr * category_lr
+prior_odds = 0.01 / 0.99
+posterior_odds = prior_odds * combined_lr
+posterior_prob = posterior_odds / (1 + posterior_odds)
+
+# Show quick risk assessment
+risk_color = "red" if posterior_prob > 0.5 else "orange" if posterior_prob > 0.1 else "green"
+st.sidebar.markdown(f"### Quick Risk Assessment")
+st.sidebar.markdown(f"Risk Score: <span style='color:{risk_color};font-weight:bold;'>{posterior_prob:.1%}</span>", unsafe_allow_html=True)
+st.sidebar.markdown(f"Amount Risk: {amount_lr:.1f}x")
+st.sidebar.markdown(f"Time Risk: {time_lr:.1f}x")
+st.sidebar.markdown(f"Category Risk: {category_lr:.1f}x")
+st.sidebar.markdown("*This is a simplified calculation. Use the Prediction page for comprehensive analysis.*")
+
 # Blockchain connection status in sidebar
 st.sidebar.title("Blockchain Status")
 try:
@@ -520,6 +821,6 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center">
     <p>Fraud Detection System with Blockchain Integration | Created with Streamlit, Scikit-Learn, and Ethereum</p>
-    <p><small>For demonstration and educational purposes only</small></p>
+    <p><small>Enhanced with Bayesian Risk Scoring for improved explainability</small></p>
 </div>
 """, unsafe_allow_html=True)

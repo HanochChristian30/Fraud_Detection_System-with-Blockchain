@@ -8,12 +8,17 @@ from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 import datetime
 import os
+import sys
+# Add the project root to the path to ensure bayesian_utils can be imported
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from bayesian_utils import BayesianRiskCalculator
 from imblearn.over_sampling import SMOTE
 import pickle
 import time
 import json
 import hashlib
 from web3 import Web3
+import matplotlib.pyplot as plt
 
 # Set page configuration
 st.set_page_config(page_title="Fraud Detection - Prediction", layout="wide")
@@ -205,6 +210,10 @@ use_smote = st.sidebar.checkbox("Apply SMOTE for training", value=False,
 risk_threshold = st.sidebar.slider("Risk Threshold", 0.0, 1.0, 0.5, 
                                 help="Adjust threshold for classifying a transaction as fraudulent")
 
+# Bayesian weighting slider
+bayesian_weight = st.sidebar.slider("Bayesian Weight", 0.0, 1.0, 0.4, 
+                                 help="Weight given to Bayesian analysis (vs ML model) in final risk score")
+
 # Add "Train New Models" button
 if st.sidebar.button("Train & Save Models"):
     with st.spinner("Training and saving all models..."):
@@ -290,6 +299,9 @@ with col1:
     # Amount with more realistic defaults
     amount = st.number_input("Transaction Amount ($)", min_value=1.0, max_value=10000.0, value=120.0)
     
+    # Transaction type (in-person or online)
+    transaction_type = st.radio("Transaction Type", ["In-Person", "Online"])
+    
     # Personal information
     col_a, col_b = st.columns(2)
     with col_a:
@@ -300,7 +312,7 @@ with col1:
         birth_day = st.number_input("Birth Day", min_value=1, max_value=31, value=1)
     
     # Location information with better defaults
-    if 'lat' in df.columns and 'long' in df.columns:
+    if transaction_type == "In-Person":
         st.subheader("Customer Location")
         lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=40.7)
         long = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=-74.0)
@@ -308,7 +320,18 @@ with col1:
         st.subheader("Merchant Location")
         merch_lat = st.number_input("Merchant Latitude", min_value=-90.0, max_value=90.0, value=40.7)
         merch_long = st.number_input("Merchant Longitude", min_value=-180.0, max_value=180.0, value=-74.1)
-    else:
+    else:  # Online transaction
+        # Online-specific fields
+        st.subheader("Online Transaction Details")
+        is_new_device = st.checkbox("New Device", value=False)
+        account_age_days = st.number_input("Account Age (days)", min_value=1, max_value=3650, value=180)
+        is_digital_goods = st.checkbox("Digital Goods", value=False)
+        billing_country = st.selectbox("Billing Country", ["US", "CA", "GB", "FR", "DE", "JP", "AU"])
+        ip_country = st.selectbox("IP Country", ["US", "CA", "GB", "FR", "DE", "JP", "AU", "RU", "CN", "BR"])
+        transaction_velocity = st.slider("Transactions in last 24h", 0, 20, 2)
+        email_domain = st.text_input("Email Domain", "gmail.com")
+        
+        # Set location to None for online transactions
         lat = long = merch_lat = merch_long = None
     
     # Optional: Job (with full dropdown, no search)
@@ -321,7 +344,7 @@ with col1:
 with col2:
     st.subheader("Prediction Results")
     
-    # Prediction function with blockchain integration and realistic fraud detection
+    # This function replaces the existing predict_fraud() function with Bayesian integration
     def predict_fraud():
         current_use_saved_models = use_saved_models  # Create a local copy
         
@@ -344,7 +367,7 @@ with col2:
             'is_fraud': [0]  # Dummy value
         }
         
-        # Add DOB if available - Fixed to use the date components properly
+        # Add DOB if available
         if birth_year and birth_month and birth_day:
             # Create proper date object to avoid format issues
             dob = pd.Timestamp(year=birth_year, month=birth_month, day=birth_day)
@@ -364,19 +387,56 @@ with col2:
         # Convert to DataFrame
         input_df = pd.DataFrame(input_data)
         
-        # Calculate risk factors
-        hour_risk = 1.5 if transaction_time.hour < 6 or transaction_time.hour > 22 else 1.0
-        amount_risk = 1.5 if amount > 1000 else 1.0
-        location_risk = 2.0 if lat is not None and long is not None and abs(lat - merch_lat) > 1 else 1.0
-        category_risk = 1.5 if category in ['electronics', 'jewelry', 'gambling'] else 1.0
+        # ---------- BAYESIAN RISK CALCULATION BEGIN ----------
         
-        # Combined risk factor
-        risk_multiplier = hour_risk * amount_risk * location_risk * category_risk
+        # Initialize Bayesian calculator with appropriate prior
+        # Online transactions typically have higher fraud rates
+        prior_fraud_prob = 0.025 if transaction_type == "Online" else 0.01
+        bayesian_calc = BayesianRiskCalculator(prior_fraud_prob=prior_fraud_prob)
         
-        # Process input data - this will handle NaN values now
+        # Prepare data for Bayesian analysis
+        if transaction_type == "In-Person":
+            bayesian_data = {
+                'hour': transaction_time.hour,
+                'amount': amount,
+                'category': category.lower(),
+                'lat': lat,
+                'long': long,
+                'merch_lat': merch_lat,
+                'merch_long': merch_long,
+                'birth_year': birth_year,
+                'gender': gender,
+                'merchant': merchant
+            }
+            bayesian_result = bayesian_calc.calculate_inperson_risk(bayesian_data)
+        else:  # Online transaction
+            bayesian_data = {
+                'hour': transaction_time.hour,
+                'amount': amount,
+                'category': category.lower(),
+                'birth_year': birth_year,
+                'is_new_device': is_new_device,
+                'account_age_days': account_age_days,
+                'is_digital_goods': is_digital_goods,
+                'shipping_address': 'Digital delivery' if is_digital_goods else 'Shipping address',
+                'billing_address': 'Billing address',
+                'ip_country': ip_country,
+                'billing_country': billing_country,
+                'transaction_velocity': transaction_velocity,
+                'email_domain': email_domain
+            }
+            bayesian_result = bayesian_calc.calculate_online_risk(bayesian_data)
+        
+        # Get the Bayesian probability
+        bayesian_probability = bayesian_result['posterior_probability']
+        
+        # ---------- BAYESIAN RISK CALCULATION END ----------
+        
+        # Process input data - this will handle NaN values
         processed_input = preprocess_data(input_df)
         
         model = None
+        model_probability = 0.0
         
         if current_use_saved_models and os.path.exists(os.path.join(models_path, model_choice.lower().replace(" ", "_") + ".pkl")):
             # Load saved model
@@ -414,7 +474,7 @@ with col2:
                 
                 # Make prediction and get probability
                 prediction = model.predict(processed_input)
-                probability = model.predict_proba(processed_input)[0][1]
+                model_probability = model.predict_proba(processed_input)[0][1]
             except Exception as e:
                 st.error(f"Error using saved model: {e}")
                 # Fallback to training a new model
@@ -481,11 +541,17 @@ with col2:
             
             # Make prediction and get probability
             prediction = model.predict(processed_input)
-            probability = model.predict_proba(processed_input)[0][1]
+            model_probability = model.predict_proba(processed_input)[0][1]
         
-        # Apply risk multiplier and threshold
-        adjusted_probability = min(probability * risk_multiplier, 1.0)
-        final_prediction = 1 if adjusted_probability >= risk_threshold else 0
+        # ----------------- HYBRID RISK SCORE -----------------
+        # Combine model prediction with Bayesian probability
+        # Weight can be adjusted based on confidence in each approach
+        model_weight = 1.0 - bayesian_weight
+        bayesian_weight_final = bayesian_weight
+        hybrid_probability = (model_weight * model_probability) + (bayesian_weight_final * bayesian_probability)
+        
+        # Apply threshold to get final prediction
+        final_prediction = 1 if hybrid_probability >= risk_threshold else 0
         
         # Get feature importance if available
         if hasattr(model, 'feature_importances_'):
@@ -501,25 +567,37 @@ with col2:
         else:
             top_features = None
         
-        # Calculate risk factors
-        risk_factors = {
-            "Time of day": hour_risk,
-            "Transaction amount": amount_risk,
-            "Location proximity": location_risk,
-            "Merchant category": category_risk
-        }
+        # Create a summary of risk factors with their likelihood ratios
+        risk_factors = bayesian_result['individual_likelihoods']
+        
+        # Convert risk factors to a more readable format
+        readable_risk_factors = {}
+        for factor, value in risk_factors.items():
+            readable_name = factor.replace('_', ' ').title()
+            readable_risk_factors[readable_name] = value
         
         # Create a hash of the transaction data for blockchain
         transaction_hash = hashlib.sha256(
             f"{merchant}|{category}|{amount}|{trans_datetime}|{lat}|{long}".encode()
         ).hexdigest()
         
+        # Create detailed risk information for display
+        risk_details = {
+            "model_probability": model_probability,
+            "bayesian_probability": bayesian_probability,
+            "hybrid_probability": hybrid_probability,
+            "prior_probability": bayesian_result['prior_probability'],
+            "likelihood_ratio": bayesian_result['likelihood_ratio'],
+            "individual_likelihoods": risk_factors,
+            "transaction_type": transaction_type
+        }
+        
         # Record prediction on blockchain
         blockchain_tx_hash = None
         if web3 and contract and account:
             try:
                 # Convert probability to a percentage (0-100)
-                confidence = int(adjusted_probability * 100)
+                confidence = int(hybrid_probability * 100)
                 
                 # Call the contract method
                 tx_hash = contract.functions.recordPrediction(
@@ -536,9 +614,8 @@ with col2:
             except Exception as e:
                 st.error(f"Blockchain transaction failed: {e}")
         
-        return final_prediction, adjusted_probability, top_features, risk_factors, blockchain_tx_hash
+        return final_prediction, hybrid_probability, top_features, readable_risk_factors, blockchain_tx_hash, risk_details
 
-    # Rest of the display code remains the same...
     # Determine button text based on blockchain availability
     button_text = "Predict Fraud and Record on Blockchain" if web3 and contract and account else "Predict Fraud"
     button_type = "primary"
@@ -568,12 +645,13 @@ with col2:
             try:
                 prediction_results = predict_fraud()
                 
-                # Unpack results (handle both with and without blockchain)
-                if len(prediction_results) == 5:
-                    prediction, probability, top_features, risk_factors, tx_hash = prediction_results
+                # Unpack results (handle the expanded return values with risk_details)
+                if len(prediction_results) == 6:
+                    prediction, probability, top_features, risk_factors, tx_hash, risk_details = prediction_results
                 else:
-                    prediction, probability, top_features, risk_factors = prediction_results
+                    prediction, probability, top_features, risk_factors = prediction_results[:4]
                     tx_hash = None
+                    risk_details = None
                 
                 # Display results with better visualization
                 if prediction == 1:
@@ -591,8 +669,8 @@ with col2:
                 elif button_text == "Predict Fraud and Record on Blockchain" and not blockchain_warning:
                     st.warning("Prediction was not recorded on blockchain")
                 
-                # Create tabs for detailed information
-                tab1, tab2, tab3 = st.tabs(["Transaction Summary", "Risk Analysis", "Model Details"])
+                # Create tabs for detailed information - add Bayesian tab
+                tab1, tab2, tab3, tab4 = st.tabs(["Transaction Summary", "Risk Analysis", "Bayesian Details", "Model Details"])
                 
                 with tab1:
                     # Display transaction details in a more visually appealing way
@@ -603,6 +681,7 @@ with col2:
                         st.markdown(f"**Merchant:** {merchant}")
                         st.markdown(f"**Category:** {category}")
                         st.markdown(f"**Amount:** ${amount:.2f}")
+                        st.markdown(f"**Transaction Type:** {transaction_type}")
                     
                     with col2:
                         st.markdown(f"**Date & Time:** {transaction_date.strftime('%Y-%m-%d')} {transaction_time.strftime('%H:%M')}")
@@ -618,6 +697,9 @@ with col2:
                         'Factor': list(risk_factors.keys()),
                         'Risk Multiplier': list(risk_factors.values())
                     })
+                    
+                    # Sort by risk multiplier to show highest risks first
+                    risk_data = risk_data.sort_values('Risk Multiplier', ascending=False)
                     
                     st.bar_chart(risk_data.set_index('Factor'))
                     
@@ -636,11 +718,104 @@ with col2:
                             st.write(f"- {feature}: {importance:.4f}")
                 
                 with tab3:
+                    # New tab for Bayesian analysis details
+                    st.subheader("Bayesian Risk Analysis")
+                    
+                    if risk_details:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("### Probability Breakdown")
+                            st.markdown(f"**Prior Probability:** {risk_details['prior_probability']:.2%}")
+                            st.markdown(f"**ML Model Probability:** {risk_details['model_probability']:.2%}")
+                            st.markdown(f"**Bayesian Probability:** {risk_details['bayesian_probability']:.2%}")
+                            st.markdown(f"**Final Hybrid Probability:** {risk_details['hybrid_probability']:.2%}")
+                            
+                            # Create a small chart to compare probabilities
+                            probs = {
+                                'Prior': risk_details['prior_probability'],
+                                'ML Model': risk_details['model_probability'],
+                                'Bayesian': risk_details['bayesian_probability'],
+                                'Hybrid': risk_details['hybrid_probability']
+                            }
+                            
+                            probs_df = pd.DataFrame({
+                                'Probability Type': list(probs.keys()),
+                                'Value': list(probs.values())
+                            })
+                            
+                            fig, ax = plt.subplots(figsize=(8, 4))
+                            bars = ax.bar(probs_df['Probability Type'], probs_df['Value'], color=['#90CAF9', '#A5D6A7', '#FFAB91', '#CE93D8'])
+                            
+                            # Add value labels
+                            for bar in bars:
+                                height = bar.get_height()
+                                ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                        f'{height:.2%}', ha='center', va='bottom')
+                            
+                            ax.set_ylim(0, max(probs.values()) * 1.2)
+                            ax.set_title('Probability Comparison')
+                            ax.set_ylabel('Probability')
+                            ax.grid(axis='y', linestyle='--', alpha=0.7)
+                            
+                            st.pyplot(fig)
+                        
+                        with col2:
+                            st.markdown("### Likelihood Ratio Analysis")
+                            st.markdown(f"**Combined Likelihood Ratio:** {risk_details['likelihood_ratio']:.2f}x")
+                            
+                            # Create data for likelihood ratio chart
+                            likelihoods = risk_details['individual_likelihoods']
+                            likelihood_data = pd.DataFrame({
+                                'Factor': list(likelihoods.keys()),
+                                'Likelihood Ratio': list(likelihoods.values())
+                            })
+                            
+                            # Sort by likelihood ratio to show highest risks first
+                            likelihood_data = likelihood_data.sort_values('Likelihood Ratio', ascending=False)
+                            
+                            # Plot likelihood ratios as a horizontal bar chart
+                            fig, ax = plt.subplots(figsize=(10, 4))
+                            bars = ax.barh(likelihood_data['Factor'], likelihood_data['Likelihood Ratio'], color='skyblue')
+                            
+                            # Add value labels on the bars
+                            for bar in bars:
+                                width = bar.get_width()
+                                ax.text(width + 0.1, bar.get_y() + bar.get_height()/2, f'{width:.1f}x', 
+                                       va='center', fontsize=8)
+                            
+                            # Add a vertical line at x=1 (baseline)
+                            ax.axvline(x=1, color='red', linestyle='--', alpha=0.7, label='Baseline Risk')
+                            
+                            ax.set_title('Risk Likelihood Ratios by Factor')
+                            ax.set_xlabel('Likelihood Ratio (higher = more risky)')
+                            plt.tight_layout()
+                            
+                            st.pyplot(fig)
+                        
+                        # Bayesian interpretation
+                        st.subheader("Bayesian Interpretation")
+                        st.markdown("""
+                        **How to interpret Bayesian risk scores:**
+                        
+                        - **Prior Probability** is the base rate of fraud before considering any evidence
+                        - **Likelihood Ratios** show how much more likely each risk factor is in fraudulent vs. legitimate transactions
+                        - **Bayesian Probability** is the updated fraud probability after considering all evidence
+                        - **Hybrid Probability** combines the ML model prediction with the Bayesian analysis
+                        
+                        The final risk score uses both statistical patterns from your ML model and transaction-specific 
+                        risk factors to give a more comprehensive fraud assessment.
+                        """)
+                    else:
+                        st.warning("Bayesian risk details not available")
+                
+                with tab4:
                     # Model details
                     st.subheader("Model Configuration")
                     st.write(f"**Model:** {model_choice}")
                     st.write(f"**SMOTE Applied:** {'Yes' if use_smote else 'No'}")
                     st.write(f"**Risk Threshold:** {risk_threshold}")
+                    st.write(f"**Bayesian Weight:** {bayesian_weight}")
                     
                     # Provide context based on fraud patterns
                     st.subheader("Detection Explanation")
@@ -648,9 +823,9 @@ with col2:
                         st.write("""
                         This transaction was flagged as potentially fraudulent based on:
                         
-                        1. The model's statistical analysis of transaction patterns
-                        2. Risk factors like unusual time, amount, location, or merchant category
-                        3. Comparison with known fraud patterns in the dataset
+                        1. The machine learning model's prediction based on statistical patterns
+                        2. Bayesian analysis of specific risk factors
+                        3. Comparison with known fraud patterns
                         
                         **Recommended Action:** Verify this transaction with the cardholder before approval.
                         """)
@@ -660,11 +835,11 @@ with col2:
                         
                         1. Consistency with normal transaction patterns
                         2. Low risk factors across key dimensions
-                        3. High confidence score from the prediction model
+                        3. High confidence score from both model and Bayesian analysis
                         
                         **Recommended Action:** Process transaction normally.
                         """)
-                    
+                
             except Exception as e:
                 st.error(f"Error making prediction: {e}")
                 st.info("Please check your input data and try again.")
